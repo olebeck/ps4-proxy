@@ -14,6 +14,8 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	ps4tls "ps4-proxy/tls"
@@ -132,9 +134,13 @@ func mainProxy(certFilename, keyFilename string) {
 			fmt.Fprintf(os.Stderr, "listen: port=%d %s\n", port, err)
 			return
 		}
-		go runProxy(ln, port)
+		go runProxy(ln, port, keyLogWriter)
 	}
-	select {}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	<-sigCh
+	os.Exit(0)
 }
 
 func loadCert(certFilename, keyFilename string) (*x509.Certificate, *rsa.PrivateKey, error) {
@@ -192,6 +198,7 @@ func startProxyListener(ca *x509.Certificate, caKey *rsa.PrivateKey, port int, k
 			return &cert, nil
 		},
 		KeyLogWriter: keyLogWriter,
+		NextProtos:   []string{"h2", "http/1.1"},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listen: %w\n", err)
@@ -200,7 +207,7 @@ func startProxyListener(ca *x509.Certificate, caKey *rsa.PrivateKey, port int, k
 	return ln, nil
 }
 
-func runProxy(ln net.Listener, port int) {
+func runProxy(ln net.Listener, port int, keyLogWriter io.Writer) {
 	defer ln.Close()
 	for {
 		conn, err := ln.Accept()
@@ -215,7 +222,7 @@ func runProxy(ln net.Listener, port int) {
 		}
 		state := tlsConn.ConnectionState()
 		fmt.Printf("Connect %s\n", state.ServerName)
-		go proxyConnection(conn, state.ServerName, port)
+		go proxyConnection(conn, state.ServerName, port, keyLogWriter)
 	}
 }
 
@@ -236,20 +243,45 @@ func resolveHost(host string) (string, error) {
 	return addresses[0], nil
 }
 
-func proxyConnection(client net.Conn, host string, port int) {
+var ps4TlsConfig = &ps4tls.Config{
+	InsecureSkipVerify: true,
+	CipherSuites: []uint16{
+		ps4tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		ps4tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+		ps4tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+		ps4tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+		ps4tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		ps4tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		ps4tls.TLS_RSA_WITH_AES_256_CBC_SHA256,
+		ps4tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
+		ps4tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		ps4tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		ps4tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+		ps4tls.TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
+	},
+	MinVersion: ps4tls.VersionTLS12,
+	MaxVersion: ps4tls.VersionTLS12,
+	NextProtos: []string{"h2", "http/1.1"},
+}
+
+func proxyConnection(client net.Conn, host string, port int, keyLogWriter io.Writer) {
 	defer client.Close()
 	address, err := resolveHost(host)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve %s: %s", host, err)
 		return
 	}
-	upstream, err := ps4tls.Dial("tcp", fmt.Sprintf("%s:%d", address, port), &ps4tls.Config{
-		ServerName:         host,
-		InsecureSkipVerify: true,
-	})
+	fmt.Printf("dial %s\n", address)
+
+	cfg := ps4TlsConfig.Clone()
+	cfg.ServerName = host
+	cfg.KeyLogWriter = keyLogWriter
+	upstream, err := ps4tls.Dial("tcp", fmt.Sprintf("%s:%d", address, port), cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "dial %s: %s", host, err)
 		return
 	}
+
 	defer upstream.Close()
 	go io.Copy(upstream, client)
 	io.Copy(client, upstream)

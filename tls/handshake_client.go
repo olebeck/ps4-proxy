@@ -69,15 +69,15 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, *keySharePrivateKeys, *echCli
 		vers:                         maxVersion,
 		compressionMethods:           []uint8{compressionNone},
 		random:                       make([]byte, 32),
-		extendedMasterSecret:         true,
-		ocspStapling:                 true,
-		scts:                         true,
+		extendedMasterSecret:         false,
+		ocspStapling:                 false,
+		scts:                         false,
 		serverName:                   hostnameInSNI(config.ServerName),
 		supportedCurves:              config.curvePreferences(maxVersion),
 		supportedPoints:              []uint8{pointFormatUncompressed},
-		secureRenegotiationSupported: true,
+		secureRenegotiationSupported: false,
 		alpnProtocols:                config.NextProtos,
-		supportedVersions:            supportedVersions,
+		//supportedVersions:            supportedVersions,
 	}
 
 	// The version at the beginning of the ClientHello was capped at TLS 1.2
@@ -109,7 +109,7 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, *keySharePrivateKeys, *echCli
 	// a compatibility measure (see RFC 8446, Section 4.1.2).
 	//
 	// The session ID is not set for QUIC connections (see RFC 9001, Section 8.4).
-	if c.quic == nil {
+	if c.quic == nil && false {
 		hello.sessionId = make([]byte, 32)
 		if _, err := io.ReadFull(config.rand(), hello.sessionId); err != nil {
 			return nil, nil, nil, errors.New("tls: short read from Rand: " + err.Error())
@@ -118,7 +118,7 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, *keySharePrivateKeys, *echCli
 
 	if maxVersion >= VersionTLS12 {
 		hello.supportedSignatureAlgorithms = supportedSignatureAlgorithms(minVersion)
-		hello.supportedSignatureAlgorithmsCert = supportedSignatureAlgorithmsCert()
+		//hello.supportedSignatureAlgorithmsCert = supportedSignatureAlgorithmsCert()
 	}
 
 	var keyShareKeys *keySharePrivateKeys

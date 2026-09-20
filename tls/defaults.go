@@ -40,18 +40,18 @@ func defaultCurvePreferences() []CurveID {
 // Note that in TLS 1.2, the ECDSA algorithms are not constrained to P-256, etc.
 func defaultSupportedSignatureAlgorithms() []SignatureScheme {
 	return []SignatureScheme{
-		PSSWithSHA256,
-		ECDSAWithP256AndSHA256,
-		Ed25519,
-		PSSWithSHA384,
-		PSSWithSHA512,
 		PKCS1WithSHA256,
 		PKCS1WithSHA384,
 		PKCS1WithSHA512,
+		ECDSAWithP256AndSHA256,
 		ECDSAWithP384AndSHA384,
 		ECDSAWithP521AndSHA512,
+		PSSWithSHA256,
+		PSSWithSHA384,
+		PSSWithSHA512,
 		PKCS1WithSHA1,
-		ECDSAWithSHA1,
+		//Ed25519,
+		//ECDSAWithSHA1,
 	}
 }
 
@@ -92,7 +92,7 @@ func defaultCipherSuites(aesGCMPreferred bool) []uint16 {
 var defaultCipherSuitesTLS13 = []uint16{
 	TLS_AES_128_GCM_SHA256,
 	TLS_AES_256_GCM_SHA384,
-	TLS_CHACHA20_POLY1305_SHA256,
+	//TLS_CHACHA20_POLY1305_SHA256,
 }
 
 // defaultCipherSuitesTLS13NoAES should be an internal detail,
@@ -106,7 +106,7 @@ var defaultCipherSuitesTLS13 = []uint16{
 //
 //go:linkname defaultCipherSuitesTLS13NoAES
 var defaultCipherSuitesTLS13NoAES = []uint16{
-	TLS_CHACHA20_POLY1305_SHA256,
+	//TLS_CHACHA20_POLY1305_SHA256,
 	TLS_AES_128_GCM_SHA256,
 	TLS_AES_256_GCM_SHA384,
 }
