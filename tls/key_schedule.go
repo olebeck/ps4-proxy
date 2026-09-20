@@ -9,7 +9,6 @@ import (
 	"crypto/ecdh"
 	"crypto/fips140"
 	"crypto/hmac"
-	"crypto/internal/fips140/tls13"
 	"crypto/mlkem"
 	"errors"
 	"hash"
@@ -22,13 +21,13 @@ import (
 // nextTrafficSecret generates the next traffic secret, given the current one,
 // according to RFC 8446, Section 7.2.
 func (c *cipherSuiteTLS13) nextTrafficSecret(trafficSecret []byte) []byte {
-	return tls13.ExpandLabel(c.hash.New, trafficSecret, "traffic upd", nil, c.hash.Size())
+	return ExpandLabel(c.hash.New, trafficSecret, "traffic upd", nil, c.hash.Size())
 }
 
 // trafficKey generates traffic keys according to RFC 8446, Section 7.3.
 func (c *cipherSuiteTLS13) trafficKey(trafficSecret []byte) (key, iv []byte) {
-	key = tls13.ExpandLabel(c.hash.New, trafficSecret, "key", nil, c.keyLen)
-	iv = tls13.ExpandLabel(c.hash.New, trafficSecret, "iv", nil, aeadNonceLength)
+	key = ExpandLabel(c.hash.New, trafficSecret, "key", nil, c.keyLen)
+	iv = ExpandLabel(c.hash.New, trafficSecret, "iv", nil, aeadNonceLength)
 	return
 }
 
@@ -36,7 +35,7 @@ func (c *cipherSuiteTLS13) trafficKey(trafficSecret []byte) (key, iv []byte) {
 // to RFC 8446, Section 4.4.4. See sections 4.4 and 4.2.11.2 for the baseKey
 // selection.
 func (c *cipherSuiteTLS13) finishedHash(baseKey []byte, transcript hash.Hash) []byte {
-	finishedKey := tls13.ExpandLabel(c.hash.New, baseKey, "finished", nil, c.hash.Size())
+	finishedKey := ExpandLabel(c.hash.New, baseKey, "finished", nil, c.hash.Size())
 	verifyData := hmac.New(c.hash.New, finishedKey)
 	verifyData.Write(transcript.Sum(nil))
 	return verifyData.Sum(nil)
@@ -44,7 +43,7 @@ func (c *cipherSuiteTLS13) finishedHash(baseKey []byte, transcript hash.Hash) []
 
 // exportKeyingMaterial implements RFC5705 exporters for TLS 1.3 according to
 // RFC 8446, Section 7.5.
-func (c *cipherSuiteTLS13) exportKeyingMaterial(s *tls13.MasterSecret, transcript hash.Hash) func(string, []byte, int) ([]byte, error) {
+func (c *cipherSuiteTLS13) exportKeyingMaterial(s *MasterSecret, transcript hash.Hash) func(string, []byte, int) ([]byte, error) {
 	expMasterSecret := s.ExporterMasterSecret(transcript)
 	return func(label string, context []byte, length int) ([]byte, error) {
 		return expMasterSecret.Exporter(label, context, length), nil

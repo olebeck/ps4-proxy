@@ -5,7 +5,7 @@
 package tls
 
 import (
-	"internal/godebug"
+	"ps4-proxy/tls/godebug"
 	"slices"
 	_ "unsafe" // for linkname
 )

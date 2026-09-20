@@ -33,9 +33,9 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"internal/godebug"
 	"net"
 	"os"
+	"ps4-proxy/tls/godebug"
 	"strings"
 )
 

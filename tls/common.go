@@ -15,13 +15,12 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha512"
-	"crypto/tls/internal/fips140tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"internal/godebug"
 	"io"
 	"net"
+	"ps4-proxy/tls/godebug"
 	"runtime"
 	"slices"
 	"strings"
@@ -1190,11 +1189,6 @@ func (c *Config) cipherSuites(aesGCMPreferred bool) []uint16 {
 			return !slices.Contains(c.CipherSuites, id)
 		})
 	}
-	if fips140tls.Required() {
-		cipherSuites = slices.DeleteFunc(cipherSuites, func(id uint16) bool {
-			return !slices.Contains(allowedCipherSuitesFIPS, id)
-		})
-	}
 	return cipherSuites
 }
 
@@ -1223,9 +1217,6 @@ var tls10server = godebug.New("tls10server")
 func (c *Config) supportedVersions(isClient bool) []uint16 {
 	versions := make([]uint16, 0, len(supportedVersions))
 	for _, v := range supportedVersions {
-		if fips140tls.Required() && !slices.Contains(allowedSupportedVersionsFIPS, v) {
-			continue
-		}
 		if (c == nil || c.MinVersion == 0) && v < VersionTLS12 {
 			if isClient || tls10server.Value() != "1" {
 				continue
@@ -1269,11 +1260,6 @@ func supportedVersionsFromMax(maxVersion uint16) []uint16 {
 
 func (c *Config) curvePreferences(version uint16) []CurveID {
 	curvePreferences := defaultCurvePreferences()
-	if fips140tls.Required() {
-		curvePreferences = slices.DeleteFunc(curvePreferences, func(x CurveID) bool {
-			return !slices.Contains(allowedCurvePreferencesFIPS, x)
-		})
-	}
 	if c != nil && len(c.CurvePreferences) != 0 {
 		curvePreferences = slices.DeleteFunc(curvePreferences, func(x CurveID) bool {
 			return !slices.Contains(c.CurvePreferences, x)
@@ -1762,10 +1748,6 @@ func supportedSignatureAlgorithms(minVers uint16) []SignatureScheme {
 var tlssha1 = godebug.New("tlssha1")
 
 func isDisabledSignatureAlgorithm(version uint16, s SignatureScheme, isCert bool) bool {
-	if fips140tls.Required() && !slices.Contains(allowedSignatureAlgorithmsFIPS, s) {
-		return true
-	}
-
 	// For the _cert extension we include all algorithms, including SHA-1 and
 	// PKCS#1 v1.5, because it's more likely that something on our side will be
 	// willing to accept a *-with-SHA1 certificate (e.g. with a custom
@@ -1819,45 +1801,6 @@ func (e *CertificateVerificationError) Error() string {
 
 func (e *CertificateVerificationError) Unwrap() error {
 	return e.Err
-}
-
-// fipsAllowedChains returns chains that are allowed to be used in a TLS connection
-// based on the current fips140tls enforcement setting.
-//
-// If fips140tls is not required, the chains are returned as-is with no processing.
-// Otherwise, the returned chains are filtered to only those allowed by FIPS 140-3.
-// If this results in no chains it returns an error.
-func fipsAllowedChains(chains [][]*x509.Certificate) ([][]*x509.Certificate, error) {
-	if !fips140tls.Required() {
-		return chains, nil
-	}
-
-	permittedChains := make([][]*x509.Certificate, 0, len(chains))
-	for _, chain := range chains {
-		if fipsAllowChain(chain) {
-			permittedChains = append(permittedChains, chain)
-		}
-	}
-
-	if len(permittedChains) == 0 {
-		return nil, errors.New("tls: no FIPS compatible certificate chains found")
-	}
-
-	return permittedChains, nil
-}
-
-func fipsAllowChain(chain []*x509.Certificate) bool {
-	if len(chain) == 0 {
-		return false
-	}
-
-	for _, cert := range chain {
-		if !isCertificateAllowedFIPS(cert) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // anyValidVerifiedChain reports if at least one of the chains in verifiedChains

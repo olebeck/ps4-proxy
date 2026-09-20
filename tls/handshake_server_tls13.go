@@ -11,14 +11,12 @@ import (
 	"crypto/hkdf"
 	"crypto/hmac"
 	"crypto/hpke"
-	"crypto/internal/fips140/tls13"
 	"crypto/rsa"
-	"crypto/tls/internal/fips140tls"
 	"crypto/x509"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash"
-	"internal/byteorder"
 	"io"
 	"slices"
 	"sort"
@@ -53,10 +51,10 @@ type serverHandshakeStateTLS13 struct {
 	suite           *cipherSuiteTLS13
 	cert            *Certificate
 	sigAlg          SignatureScheme
-	earlySecret     *tls13.EarlySecret
+	earlySecret     *EarlySecret
 	sharedKey       []byte
-	handshakeSecret *tls13.HandshakeSecret
-	masterSecret    *tls13.MasterSecret
+	handshakeSecret *HandshakeSecret
+	masterSecret    *MasterSecret
 	trafficSecret   []byte // client_application_traffic_secret_0
 	transcript      hash.Hash
 	clientFinished  []byte
@@ -179,9 +177,6 @@ func (hs *serverHandshakeStateTLS13) processClientHello() error {
 	preferenceList := defaultCipherSuitesTLS13
 	if !hasAESGCMHardwareSupport || !isAESGCMPreferred(hs.clientHello.cipherSuites) {
 		preferenceList = defaultCipherSuitesTLS13NoAES
-	}
-	if fips140tls.Required() {
-		preferenceList = allowedCipherSuitesTLS13FIPS
 	}
 	for _, suiteID := range preferenceList {
 		hs.suite = mutualCipherSuiteTLS13(hs.clientHello.cipherSuites, suiteID)
@@ -386,7 +381,7 @@ func (hs *serverHandshakeStateTLS13) checkForResumption() error {
 			}
 		}
 
-		hs.earlySecret = tls13.NewEarlySecret(hs.suite.hash.New, sessionState.secret)
+		hs.earlySecret = NewEarlySecret(hs.suite.hash.New, sessionState.secret)
 		binderKey := hs.earlySecret.ResumptionBinderKey()
 		// Clone the transcript in case a HelloRetryRequest was recorded.
 		transcript := cloneHash(hs.transcript, hs.suite.hash)
@@ -563,7 +558,7 @@ func (hs *serverHandshakeStateTLS13) doHelloRetryRequest(selectedGroup CurveID) 
 			c.sendAlert(alertInternalError)
 			return nil, err
 		}
-		acceptConfirmation := tls13.ExpandLabel(h, prf, "hrr ech accept confirmation", confTranscript.Sum(nil), 8)
+		acceptConfirmation := ExpandLabel(h, prf, "hrr ech accept confirmation", confTranscript.Sum(nil), 8)
 		helloRetryRequest.encryptedClientHello = acceptConfirmation
 	}
 
@@ -727,7 +722,7 @@ func (hs *serverHandshakeStateTLS13) sendServerParameters() error {
 			c.sendAlert(alertInternalError)
 			return err
 		}
-		acceptConfirmation := tls13.ExpandLabel(h, prk, "ech accept confirmation", echTranscript.Sum(nil), 8)
+		acceptConfirmation := ExpandLabel(h, prk, "ech accept confirmation", echTranscript.Sum(nil), 8)
 		copy(hs.hello.random[32-8:], acceptConfirmation)
 	}
 
@@ -745,7 +740,7 @@ func (hs *serverHandshakeStateTLS13) sendServerParameters() error {
 
 	earlySecret := hs.earlySecret
 	if earlySecret == nil {
-		earlySecret = tls13.NewEarlySecret(hs.suite.hash.New, nil)
+		earlySecret = NewEarlySecret(hs.suite.hash.New, nil)
 	}
 	hs.handshakeSecret = earlySecret.HandshakeSecret(hs.sharedKey)
 
@@ -975,7 +970,7 @@ func (c *Conn) sendSessionTicket(earlyData bool, extra [][]byte) error {
 	}
 	// ticket_nonce, which must be unique per connection, is always left at
 	// zero because we only ever send one ticket per connection.
-	psk := tls13.ExpandLabel(suite.hash.New, c.resumptionSecret, "resumption",
+	psk := ExpandLabel(suite.hash.New, c.resumptionSecret, "resumption",
 		nil, suite.hash.Size())
 
 	m := new(newSessionTicketMsgTLS13)
@@ -1010,7 +1005,7 @@ func (c *Conn) sendSessionTicket(earlyData bool, extra [][]byte) error {
 	if _, err := c.config.rand().Read(ageAdd); err != nil {
 		return err
 	}
-	m.ageAdd = byteorder.LEUint32(ageAdd)
+	m.ageAdd = binary.LittleEndian.Uint32(ageAdd)
 
 	if earlyData {
 		// RFC 9001, Section 4.6.1
