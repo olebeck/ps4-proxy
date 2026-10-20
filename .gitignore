@@ -2,3 +2,6 @@
 /ps4-proxy
 /ps4-proxy.exe
 /keylog.txt
+!/EM_OV_TLS_CA_G3C.pem
+!/EM_OV_TLS_CA_G3C.key
+/coredns
